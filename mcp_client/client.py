@@ -75,7 +75,7 @@ async def main() -> None:
             output = await invoke_tool(
                 session,
                 "account_balance",
-                {"account_id": "DEMO-001"},
+                {},
             )
             print(output)
 
