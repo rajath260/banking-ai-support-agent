@@ -1,7 +1,8 @@
 """LangGraph workflow that lets a Hugging Face model request banking tools."""
 
 import json
-from typing import TypedDict
+from operator import add
+from typing import Annotated, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
@@ -26,7 +27,7 @@ class AgentState(TypedDict, total=False):
     model_text: str
     tool_results: list[dict]
     final_response: str
-    trace: list[str]
+    trace: Annotated[list[str], add]
 
 
 def _normalise_tool_calls(message) -> list[dict]:
