@@ -28,5 +28,14 @@ MCP (Model Context Protocol) standardizes how an AI host/client discovers and in
 
 An application can discover MCP tools and make them available to a model. The model may request a tool call; the host/client invokes it over MCP. MCP is not itself the model's reasoning capability.
 
+### MCP client lifecycle in this repository
+1. The MCP host launches the server process with stdio transport.
+2. The client and server initialize an MCP session.
+3. The client calls `list_tools()` to discover tool names, descriptions and input schemas.
+4. The client calls `call_tool()` with a selected tool name and arguments.
+5. The server executes its Python function and returns content to the client.
+
+The example in `mcp_client/client.py` demonstrates discovery and invocation independently from the Hugging Face agent. This separation makes it possible to learn the MCP protocol without spending inference credits. A later milestone can connect dynamically discovered MCP tools to the model-driven agent.
+
 ## Interview explanation
 "State carries workflow context, nodes perform individual steps, edges define transitions, and conditional edges implement branching. Reducers define how updates to individual state fields are merged. MCP standardizes tool connectivity, while model tool calling is the model's structured request to use a tool. The host application validates and executes that request."
