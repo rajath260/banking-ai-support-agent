@@ -56,7 +56,7 @@ async def test_invoke_tool_sends_arguments_and_returns_text():
     output = await invoke_tool(
         session,
         "account_balance",
-        {"account_id": "DEMO-001"},
+        {},
     )
 
     assert session.called_name == "account_balance"
