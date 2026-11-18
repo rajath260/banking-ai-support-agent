@@ -33,7 +33,7 @@ An MCP server exposes mock banking functions over stdio. The standalone MCP clie
 - app/agent_tools.py: model tool schemas and safe tool dispatcher
 - app/agent_graph.py: LangGraph workflow with model tool calling
 - app/agent_main.py: interactive entry point for the direct Python-tool LLM agent
-- app/mcp_agent_graph.py: LangGraph workflow using dynamically discovered MCP tools
+- app/mcp_agent_graph.py: LangGraph workflow using dynamically discovered MCP tools and checkpointed conversation history
 - mcp_server/server.py: MCP server exposing mock tools over stdio
 - mcp_client/client.py: standalone MCP client discovery/invocation demo
 - mcp_client/agent.py: interactive LLM agent connected to the MCP server
@@ -102,13 +102,20 @@ python -m app.main
 python -m pytest
 ```
 
-Tests cover the deterministic graph, banking tool dispatcher, offline LLM-agent graph behavior, MCP client helpers and MCP-connected agent graph. They do not make a live Hugging Face API call or launch an MCP server process.
+Tests cover the deterministic graph, banking tool dispatcher, offline LLM-agent graph behavior, MCP client helpers, MCP-connected agent graph and multi-turn conversation history. They do not make a live Hugging Face API call or launch an MCP server process.
 
-## Run the MCP-connected LLM agent
+## Run the MCP-connected conversational agent
 ```powershell
 python -m mcp_client.agent
 ```
-This workflow requires a working Hugging Face Inference Providers account and available credits. It launches the MCP server, discovers its tools, gives their schemas to the model, invokes any requested tool over MCP, and asks the model to produce the final answer. The Hugging Face provider is kept modular and can be replaced later.
+This workflow requires a working Hugging Face Inference Providers account and available credits. It launches the MCP server, discovers its tools, gives their schemas to the model, invokes any requested tool over MCP, and asks the model to produce the final answer. It keeps conversation history for the lifetime of the running CLI session. Type `exit` or `quit` to end the conversation.
+
+Try this multi-turn sequence:
+1. `What is my account balance?`
+2. `Show my last two transactions.`
+3. `Can you explain the first transaction?`
+
+The third question is sent with the earlier turns in the conversation history. The in-memory checkpointer is reset when the process exits; durable cross-restart memory is a future enhancement. The Hugging Face provider is kept modular and can be replaced later.
 
 ## Run the standalone MCP client demo
 ```powershell
@@ -141,9 +148,10 @@ A real banking application needs authentication, authorization at every tool bou
 2. Connect a hosted Hugging Face model.
 3. Let the model request approved banking tools through function calling (implemented in this milestone).
 4. Connect an MCP client and discover/invoke tools (implemented).
-5. Add conversation history, retries, robust error handling and tracing.
-6. Add RAG for banking FAQs.
-7. Prepare architecture diagrams and interview explanations.
+5. Add conversation history with LangGraph checkpointing (implemented in-memory).
+6. Add retries, durable checkpoint storage, robust error handling and tracing.
+7. Add RAG for banking FAQs.
+8. Prepare architecture diagrams and interview explanations.
 
 ## Interview summary
 "I built a fictional banking support agent using LangGraph and a Hugging Face hosted model. It discovers read-only tools from an MCP server at runtime, exposes their schemas to the model, validates that requested tools were discovered, invokes them through the MCP client and returns their results to the model. The MCP server owns the fixed demo account context, while LangGraph orchestrates model and tool execution."
