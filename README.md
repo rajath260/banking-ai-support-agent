@@ -21,7 +21,7 @@ The project currently provides two runnable workflows:
 
 The LLM does not execute Python. It returns a structured tool request. The application validates the tool name and arguments, injects the account ID from application context, executes the allow-listed mock function and sends the result back to the model.
 
-An MCP server exposes equivalent mock banking functions over stdio. An MCP client has not yet been connected.
+An MCP server exposes equivalent mock banking functions over stdio. A separate example MCP client launches that server, discovers its tools and invokes the account-balance tool. The LLM agent and MCP client are currently separate demonstrations; the Hugging Face agent does not yet discover tools dynamically through MCP.
 
 ## Structure
 - app/state.py: state schema for the basic graph
@@ -32,7 +32,8 @@ An MCP server exposes equivalent mock banking functions over stdio. An MCP clien
 - app/agent_tools.py: model tool schemas and safe tool dispatcher
 - app/agent_graph.py: LangGraph workflow with model tool calling
 - app/agent_main.py: interactive entry point for the LLM agent
-- mcp_server/server.py: MCP server exposing mock tools
+- mcp_server/server.py: MCP server exposing mock tools over stdio
+- mcp_client/client.py: MCP client that discovers and invokes server tools
 - tests/test_graph.py: basic graph tests
 - tests/test_agent_tools.py: tool allow-list and argument validation tests
 - docs/concepts.md: interview-oriented explanations
@@ -95,13 +96,19 @@ python -m app.main
 python -m pytest
 ```
 
-Tests cover the deterministic graph and the banking tool dispatcher. They do not make a live Hugging Face API call.
+Tests cover the deterministic graph, banking tool dispatcher, offline LLM-agent graph behavior and MCP client helper functions. They do not make a live Hugging Face API call or launch an MCP server process.
 
-## Run the MCP server
+## Run the MCP client demo
+```powershell
+python -m mcp_client.client
+```
+The client launches the MCP server automatically over stdio, initializes the protocol session, lists the tools published by the server, and invokes the account-balance tool. You should not start the server manually in another terminal for this demo.
+
+To run the server independently for inspection by another MCP host, use:
 ```powershell
 python -m mcp_server.server
 ```
-The MCP server uses stdio and is intended to be launched by an MCP host/client.
+The server uses stdio, so its standard output is reserved for MCP protocol messages.
 
 ## Important concepts
 | Concept | Meaning | Project example |
