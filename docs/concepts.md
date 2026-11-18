@@ -35,7 +35,10 @@ An application can discover MCP tools and make them available to a model. The mo
 4. The client calls `call_tool()` with a selected tool name and arguments.
 5. The server executes its Python function and returns content to the client.
 
-The example in `mcp_client/client.py` demonstrates discovery and invocation independently from the Hugging Face agent. This separation makes it possible to learn the MCP protocol without spending inference credits. A later milestone can connect dynamically discovered MCP tools to the model-driven agent.
+The example in `mcp_client/client.py` demonstrates discovery and invocation independently from the model. The integrated workflow in `mcp_client/agent.py` keeps the MCP session open while LangGraph runs: it discovers tools, converts their JSON schemas into model function tools, lets the model select a tool, invokes that tool through MCP, and returns the result to the model. The MCP server fixes the demo account ID internally, so the model cannot select another account.
+
+### Dynamic MCP tool calling
+The key difference from hardcoded tool calling is that the model's available function schemas are built from the MCP server's `list_tools()` response. Adding a new MCP tool can make it available to the agent without manually duplicating its schema in the LLM agent. The host must still validate that the requested tool was actually discovered and handle tool errors.
 
 ## Interview explanation
 "State carries workflow context, nodes perform individual steps, edges define transitions, and conditional edges implement branching. Reducers define how updates to individual state fields are merged. MCP standardizes tool connectivity, while model tool calling is the model's structured request to use a tool. The host application validates and executes that request."
