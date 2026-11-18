@@ -1,10 +1,11 @@
-"""LangGraph agent that discovers and invokes tools through an MCP session."""
+"""LangGraph agent with MCP tools and checkpoint-backed conversation memory."""
 
 import asyncio
 import json
 from operator import add
 from typing import Annotated, TypedDict
 
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from app.llm import MODEL_ID, get_client
@@ -15,12 +16,13 @@ SYSTEM_PROMPT = (
     "Use the available MCP tools for account-specific questions. "
     "Never invent balances, transactions or card status. "
     "The MCP server exposes read-only tools for one fixed fictional demo account. "
+    "Use the conversation history to understand follow-up questions. "
     "Do not claim a tool was used unless its result is provided."
 )
 
 
 class MCPAgentState(TypedDict, total=False):
-    user_query: str
+    messages: Annotated[list[dict], add]
     tool_calls: list[dict]
     assistant_message: dict
     model_text: str
@@ -89,13 +91,19 @@ def _mcp_result_text(result) -> str:
     return text or "The MCP tool returned no text content."
 
 
-def build_mcp_agent_graph(session, discovered_tools: list[dict], client=None):
-    """Build an async LangGraph using tools discovered from an MCP session.
+def build_mcp_agent_graph(
+    session,
+    discovered_tools: list[dict],
+    client=None,
+    checkpointer=None,
+):
+    """Build an async MCP agent graph with thread-scoped checkpoint memory.
 
-    The session must remain open for the lifetime of graph execution.
-    A fake session and fake model client can be injected for offline tests.
+    Keep the MCP session open while invoking the graph. Reuse the same graph
+    and configurable thread_id for every turn in one conversation.
     """
     client = client or get_client()
+    checkpointer = checkpointer or MemorySaver()
     llm_tools = mcp_tools_to_llm_tools(discovered_tools)
     allowed_tool_names = {tool["name"] for tool in discovered_tools}
 
@@ -105,7 +113,7 @@ def build_mcp_agent_graph(session, discovered_tools: list[dict], client=None):
             model=MODEL_ID,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": state["user_query"]},
+                *state.get("messages", []),
             ],
             tools=llm_tools,
             tool_choice="auto",
@@ -134,7 +142,8 @@ def build_mcp_agent_graph(session, discovered_tools: list[dict], client=None):
             "tool_calls": calls,
             "assistant_message": assistant_message,
             "model_text": message.content or "",
-            "trace": ["LLM selected from tools discovered through MCP"],
+            "messages": [assistant_message],
+            "trace": ["LLM evaluated the conversation using checkpointed history"],
         }
 
     def route_after_model(state: MCPAgentState) -> str:
@@ -142,9 +151,13 @@ def build_mcp_agent_graph(session, discovered_tools: list[dict], client=None):
 
     async def execute_mcp_tools(state: MCPAgentState) -> dict:
         results = []
+        tool_messages = []
         for call in state.get("tool_calls", []):
             if call["name"] not in allowed_tool_names:
-                output = f"Tool request rejected: '{call['name']}' was not discovered from the MCP server."
+                output = (
+                    f"Tool request rejected: '{call['name']}' "
+                    "was not discovered from the MCP server."
+                )
             else:
                 try:
                     mcp_result = await session.call_tool(
@@ -153,40 +166,37 @@ def build_mcp_agent_graph(session, discovered_tools: list[dict], client=None):
                     output = _mcp_result_text(mcp_result)
                 except Exception as exc:
                     output = f"MCP tool execution failed: {exc}"
-            results.append(
-                {"tool_call_id": call["id"], "content": output}
+            results.append({"tool_call_id": call["id"], "content": output})
+            tool_messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call["id"],
+                    "content": output,
+                }
             )
         return {
             "tool_results": results,
+            "messages": tool_messages,
             "trace": [f"MCP client invoked {len(results)} requested tool call(s)"],
         }
 
     async def finish(state: MCPAgentState) -> dict:
         if not state.get("tool_calls"):
+            answer = state.get(
+                "model_text", "I could not generate a response."
+            )
             return {
-                "final_response": state.get(
-                    "model_text", "I could not generate a response."
-                ),
+                "final_response": answer,
                 "trace": ["Model answered without requesting an MCP tool"],
             }
 
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": state["user_query"]},
-            state["assistant_message"],
-        ]
-        messages.extend(
-            {
-                "role": "tool",
-                "tool_call_id": item["tool_call_id"],
-                "content": item["content"],
-            }
-            for item in state.get("tool_results", [])
-        )
         response = await asyncio.to_thread(
             client.chat.completions.create,
             model=MODEL_ID,
-            messages=messages,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                *state.get("messages", []),
+            ],
             tool_choice="none",
             max_tokens=250,
             temperature=0.1,
@@ -194,6 +204,7 @@ def build_mcp_agent_graph(session, discovered_tools: list[dict], client=None):
         answer = response.choices[0].message.content or ""
         return {
             "final_response": answer,
+            "messages": [{"role": "assistant", "content": answer}],
             "trace": ["LLM generated its final response using MCP tool output"],
         }
 
@@ -212,4 +223,4 @@ def build_mcp_agent_graph(session, discovered_tools: list[dict], client=None):
     )
     builder.add_edge("execute_mcp_tools", "finish")
     builder.add_edge("finish", END)
-    return builder.compile()
+    return builder.compile(checkpointer=checkpointer)
