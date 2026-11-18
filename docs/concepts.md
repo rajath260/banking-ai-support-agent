@@ -1,0 +1,32 @@
+# LangGraph, tool calling and MCP — concept notes
+
+## State
+State is the shared data structure carried through graph execution. Nodes read the current state and return updates. In this project, BankingState contains the query, demo account identifier, intent, tool result, final response and execution trace.
+
+## Nodes
+A node is one unit of work. It may be a Python function, an LLM call, an API call or business logic. Here, nodes classify a query, execute a mock tool or format a response. Nodes should return state updates rather than mutate the input object.
+
+## Edges
+A normal edge always moves execution from one named node to another. For example, the tool node leads to the response-formatting node.
+
+## Conditional edges
+A conditional edge calls a routing function and chooses the next node based on its return value. Here, supported account intents route to the tool node; other requests route to a general response.
+
+## Reducers
+A reducer is associated with a state key and defines how updates to that key are merged. A key without a custom reducer normally uses replacement semantics. The trace field uses operator.add, so new trace entries are appended to the existing list. Reducers are particularly useful when parallel branches contribute updates to the same field. Choose them carefully; concatenating data is not always the right merge strategy.
+
+## Tool calling
+With model tool calling, the model emits a structured request containing a tool name and arguments. The application validates the request, checks authorization and executes the function. The result is returned to the model, which can then produce a final response. The model does not directly execute Python or access a database.
+
+This first milestone uses deterministic keyword routing, not LLM tool calling. That distinction is intentional and should be stated clearly in an interview.
+
+## MCP
+MCP (Model Context Protocol) standardizes how an AI host/client discovers and invokes tools exposed by an MCP server.
+- Host: the AI application that manages the model and MCP connections.
+- MCP client: the component in the host that speaks the protocol to a server.
+- MCP server: publishes tools and handles protocol requests.
+
+An application can discover MCP tools and make them available to a model. The model may request a tool call; the host/client invokes it over MCP. MCP is not itself the model's reasoning capability.
+
+## Interview explanation
+"State carries workflow context, nodes perform individual steps, edges define transitions, and conditional edges implement branching. Reducers define how updates to individual state fields are merged. MCP standardizes tool connectivity, while model tool calling is the model's structured request to use a tool. The host application validates and executes that request."
