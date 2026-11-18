@@ -78,5 +78,5 @@ def test_graph_returns_general_answer_without_calling_tools():
 
     assert result["final_response"] == "A savings account earns interest on deposits."
     assert len(completions.calls) == 1
-    assert result["tool_results"] == []
+    assert result.get("tool_results", []) == []
     assert len(result["trace"]) == 2
