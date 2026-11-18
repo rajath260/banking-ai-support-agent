@@ -1,28 +1,24 @@
-"""Hugging Face LLM connection for the Banking AI Support Agent.
-
-This module only sends a prompt to a hosted model. It does not execute banking
-tools or make the LangGraph workflow an LLM-powered agent yet.
-"""
+"""Hugging Face LLM connection helpers."""
 
 import os
 
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
 
-# Load local environment variables from the repository's .env file.
 load_dotenv()
 
-HF_TOKEN = os.getenv("HF_TOKEN")
 MODEL_ID = os.getenv("HF_MODEL", "openai/gpt-oss-120b")
 
-if not HF_TOKEN:
-    raise RuntimeError(
-        "HF_TOKEN is not set. Create a .env file in the repository root "
-        "and add HF_TOKEN=your_huggingface_token."
-    )
 
-# Hugging Face routes the request to an available inference provider.
-client = InferenceClient(token=HF_TOKEN, provider="auto")
+def get_client() -> InferenceClient:
+    """Create an authenticated Hugging Face InferenceClient on demand."""
+    token = os.getenv("HF_TOKEN")
+    if not token:
+        raise RuntimeError(
+            "HF_TOKEN is not set. Create a .env file in the repository root "
+            "and add HF_TOKEN=your_huggingface_token."
+        )
+    return InferenceClient(token=token, provider="auto")
 
 
 def ask_llm(question: str) -> str:
@@ -30,7 +26,7 @@ def ask_llm(question: str) -> str:
     if not question or not question.strip():
         raise ValueError("question must not be empty")
 
-    response = client.chat.completions.create(
+    response = get_client().chat.completions.create(
         model=MODEL_ID,
         messages=[
             {
@@ -39,8 +35,8 @@ def ask_llm(question: str) -> str:
                     "You are a helpful banking customer support assistant. "
                     "Explain general banking concepts clearly. Never invent "
                     "customer account details, balances, or transactions. "
-                    "If account-specific information is requested, explain "
-                    "that you need to retrieve it from an approved banking tool."
+                    "For account-specific information, say it must be retrieved "
+                    "from an approved banking tool."
                 ),
             },
             {"role": "user", "content": question.strip()},
@@ -48,9 +44,7 @@ def ask_llm(question: str) -> str:
         max_tokens=250,
         temperature=0.2,
     )
-
-    content = response.choices[0].message.content
-    return content or ""
+    return response.choices[0].message.content or ""
 
 
 if __name__ == "__main__":
