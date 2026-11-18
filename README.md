@@ -21,7 +21,7 @@ The project currently provides two runnable workflows:
 
 The LLM does not execute Python. It returns a structured tool request. The application validates the tool name and arguments, injects the account ID from application context, executes the allow-listed mock function and sends the result back to the model.
 
-An MCP server exposes equivalent mock banking functions over stdio. A separate example MCP client launches that server, discovers its tools and invokes the account-balance tool. The LLM agent and MCP client are currently separate demonstrations; the Hugging Face agent does not yet discover tools dynamically through MCP.
+An MCP server exposes mock banking functions over stdio. The standalone MCP client demonstrates discovery and invocation. The MCP-connected LLM agent also discovers tool schemas at runtime, passes them to the Hugging Face model, and invokes the selected tool through the live MCP session. The MCP server fixes the account context to the fictional DEMO-001 account; the model cannot supply an account ID.
 
 ## Structure
 - app/state.py: state schema for the basic graph
@@ -31,13 +31,16 @@ An MCP server exposes equivalent mock banking functions over stdio. A separate e
 - app/llm.py: Hugging Face hosted chat model connection
 - app/agent_tools.py: model tool schemas and safe tool dispatcher
 - app/agent_graph.py: LangGraph workflow with model tool calling
-- app/agent_main.py: interactive entry point for the LLM agent
+- app/agent_main.py: interactive entry point for the direct Python-tool LLM agent
+- app/mcp_agent_graph.py: LangGraph workflow using dynamically discovered MCP tools
 - mcp_server/server.py: MCP server exposing mock tools over stdio
-- mcp_client/client.py: MCP client that discovers and invokes server tools
+- mcp_client/client.py: standalone MCP client discovery/invocation demo
+- mcp_client/agent.py: interactive LLM agent connected to the MCP server
 - tests/test_graph.py: basic graph tests
 - tests/test_agent_tools.py: tool allow-list and argument validation tests
 - tests/test_agent_graph.py: offline LangGraph tool-calling tests
 - tests/test_mcp_client.py: offline MCP client helper tests
+- tests/test_mcp_agent_graph.py: offline tests for the MCP-connected LLM agent
 - docs/concepts.md: interview-oriented explanations
 
 ## Setup
@@ -86,7 +89,7 @@ Example prompts:
 - Is my debit card active?
 - What is the difference between a savings account and a current account?
 
-The account ID is deliberately supplied by the application as `DEMO-001`. The model is not allowed to choose or override it.
+The direct Python-tool agent receives the account ID from application context. In the MCP-connected agent, the MCP server owns the fixed `DEMO-001` account context; the model does not receive an account-ID argument.
 
 ## Run the original deterministic graph
 ```powershell
@@ -98,9 +101,15 @@ python -m app.main
 python -m pytest
 ```
 
-Tests cover the deterministic graph, banking tool dispatcher, offline LLM-agent graph behavior and MCP client helper functions. They do not make a live Hugging Face API call or launch an MCP server process.
+Tests cover the deterministic graph, banking tool dispatcher, offline LLM-agent graph behavior, MCP client helpers and MCP-connected agent graph. They do not make a live Hugging Face API call or launch an MCP server process.
 
-## Run the MCP client demo
+## Run the MCP-connected LLM agent
+```powershell
+python -m mcp_client.agent
+```
+This workflow requires a working Hugging Face Inference Providers account and available credits. It launches the MCP server, discovers its tools, gives their schemas to the model, invokes any requested tool over MCP, and asks the model to produce the final answer. The Hugging Face provider is kept modular and can be replaced later.
+
+## Run the standalone MCP client demo
 ```powershell
 python -m mcp_client.client
 ```
