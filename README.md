@@ -36,6 +36,8 @@ An MCP server exposes equivalent mock banking functions over stdio. A separate e
 - mcp_client/client.py: MCP client that discovers and invokes server tools
 - tests/test_graph.py: basic graph tests
 - tests/test_agent_tools.py: tool allow-list and argument validation tests
+- tests/test_agent_graph.py: offline LangGraph tool-calling tests
+- tests/test_mcp_client.py: offline MCP client helper tests
 - docs/concepts.md: interview-oriented explanations
 
 ## Setup
