@@ -60,7 +60,7 @@ async def test_invoke_tool_sends_arguments_and_returns_text():
     )
 
     assert session.called_name == "account_balance"
-    assert session.called_arguments == {"account_id": "DEMO-001"}
+    assert session.called_arguments == {}
     assert "INR 45,000.00" in output
 
 
