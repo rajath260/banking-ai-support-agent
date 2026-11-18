@@ -42,3 +42,18 @@ The key difference from hardcoded tool calling is that the model's available fun
 
 ## Interview explanation
 "State carries workflow context, nodes perform individual steps, edges define transitions, and conditional edges implement branching. Reducers define how updates to individual state fields are merged. MCP standardizes tool connectivity, while model tool calling is the model's structured request to use a tool. The host application validates and executes that request."
+
+
+## Conversation memory and checkpointing
+
+The MCP-connected agent uses LangGraph's `MemorySaver` checkpointer and a `messages` state field with an append reducer.
+
+- A **message** is one user, assistant or tool entry in the conversation.
+- A **thread ID** identifies one conversation. Reusing the same thread ID loads its prior checkpointed state.
+- A **checkpointer** saves graph state between invocations, so a later user turn can include earlier messages.
+- The CLI keeps one graph and MCP session alive and invokes the graph repeatedly with the same thread ID.
+- The memory is currently in-process only. It disappears when the CLI exits. A production deployment should use a durable checkpointer, apply retention controls, and isolate thread IDs by authenticated user/session.
+
+For example, after the user asks for an account balance, the next request "show my last two transactions" is sent to the model along with the earlier messages. The model can then interpret follow-up questions using the conversation context.
+
+Checkpointing does not mean the model itself permanently remembers the user. The application retrieves the relevant conversation state and includes it in each model request.
