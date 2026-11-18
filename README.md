@@ -1,35 +1,40 @@
 # Banking AI Support Agent
 
-An educational project for learning Python, LangGraph, LangChain, Hugging Face, MCP and LLM tool calling through a fictional banking support use case.
+An educational project for learning Python, LangGraph, Hugging Face, LLM tool calling, MCP and agent architecture through a fictional banking support use case.
 
 > Safety: this project uses fictional in-memory data only. It is not connected to a bank or payment network. Never commit real customer data, credentials, tokens or account details.
 
 ## What you will learn
 - Difference between an LLM, an agent and a workflow.
 - Connecting a Python application to a hosted Hugging Face model.
-- Tool calling: the model requests a tool; the application validates and executes it.
-- MCP: standardized discovery and invocation of tools through a client/server protocol.
-- LangGraph: StateGraph, state, nodes, edges, conditional routing and reducers.
-- Reliability concepts to add later: validation, retries, checkpointing and human approval.
+- Function/tool calling: the model requests a tool; the application validates and executes it.
+- LangGraph state, nodes, edges and conditional routing.
+- MCP discovery and invocation through a standardized client/server protocol.
+- Reliability concepts: validation, retries, checkpointing and human approval.
 
-## Architecture today
-The project currently contains two separate paths:
+## Architecture
 
-1. **Existing deterministic LangGraph workflow:** customer query -> keyword intent classification -> conditional route -> read-only mock banking function or general response.
-2. **New Hugging Face connection:** Python prompt -> Hugging Face Inference Providers -> model response.
+The project currently provides two runnable workflows:
 
-The Hugging Face connection is an LLM call, not yet an integrated agent. It does not currently select or execute banking tools. We will connect model tool calling to LangGraph in a later milestone.
+1. **Basic deterministic workflow:** customer query -> keyword intent classification -> conditional route -> read-only mock banking function or general response.
+2. **Hugging Face tool-calling agent:** customer query -> Hugging Face model -> optional approved tool call -> Python tool dispatcher -> model summarizes the tool result.
+
+The LLM does not execute Python. It returns a structured tool request. The application validates the tool name and arguments, injects the account ID from application context, executes the allow-listed mock function and sends the result back to the model.
 
 An MCP server exposes equivalent mock banking functions over stdio. An MCP client has not yet been connected.
 
 ## Structure
-- app/state.py: shared graph state and reducer example
+- app/state.py: state schema for the basic graph
 - app/banking_tools.py: fictional read-only banking functions
-- app/graph.py: LangGraph nodes, edges and conditional routing
-- app/main.py: runnable graph examples
+- app/graph.py: original deterministic LangGraph workflow
+- app/main.py: run the original deterministic workflow
 - app/llm.py: Hugging Face hosted chat model connection
+- app/agent_tools.py: model tool schemas and safe tool dispatcher
+- app/agent_graph.py: LangGraph workflow with model tool calling
+- app/agent_main.py: interactive entry point for the LLM agent
 - mcp_server/server.py: MCP server exposing mock tools
 - tests/test_graph.py: basic graph tests
+- tests/test_agent_tools.py: tool allow-list and argument validation tests
 - docs/concepts.md: interview-oriented explanations
 
 ## Setup
@@ -52,69 +57,74 @@ pip install -r requirements.txt
 ```
 
 ## Configure Hugging Face
-1. Create or sign in to a Hugging Face account.
-2. Create a user access token with **Inference Providers** permission at https://huggingface.co/settings/tokens.
-3. Create a file named `.env` in the repository root (next to `.env.example`).
-4. Add your token:
+1. Create a Hugging Face access token with Inference Providers permission at https://huggingface.co/settings/tokens.
+2. Create a local `.env` file in the repository root.
+3. Add:
    ```env
    HF_TOKEN=hf_your_actual_token
    HF_MODEL=openai/gpt-oss-120b
    ```
-5. Keep `.env` private. It is listed in `.gitignore`; never commit it.
+4. Never commit `.env`; it is listed in `.gitignore`.
 
-The default model is `openai/gpt-oss-120b`. You can override it with `HF_MODEL` if another chat model is available to your Hugging Face account through Inference Providers. Availability, provider support and pricing can change.
+The default model is `openai/gpt-oss-120b`. Availability and tool-calling support depend on the selected inference provider and account.
 
-Run the Hugging Face connection from the repository root:
+## Run the Hugging Face connection
 ```powershell
 python -m app.llm
 ```
 
-Run the existing deterministic graph:
+## Run the LLM-powered banking agent
+```powershell
+python -m app.agent_main
+```
+Example prompts:
+- What is my account balance?
+- Show my last two transactions.
+- Is my debit card active?
+- What is the difference between a savings account and a current account?
+
+The account ID is deliberately supplied by the application as `DEMO-001`. The model is not allowed to choose or override it.
+
+## Run the original deterministic graph
 ```powershell
 python -m app.main
 ```
 
-Run tests:
+## Run tests
 ```powershell
 python -m pytest
 ```
 
-Run the MCP server:
+Tests cover the deterministic graph and the banking tool dispatcher. They do not make a live Hugging Face API call.
+
+## Run the MCP server
 ```powershell
 python -m mcp_server.server
 ```
+The MCP server uses stdio and is intended to be launched by an MCP host/client.
 
-The MCP server uses stdio. It is intended to be launched by an MCP host/client, not used as a normal interactive terminal command.
-
-## Key concepts
+## Important concepts
 | Concept | Meaning | Project example |
 |---|---|---|
-| LLM | Model that generates text from input | Hugging Face chat model in app/llm.py |
-| State | Shared data passed between graph nodes | query, intent, result |
-| Node | A unit of work | classify request |
-| Edge | Fixed transition | tool node to response node |
-| Conditional edge | Chooses next node | tool path or general path |
-| Reducer | Defines how updates to a state key merge | append execution trace |
-| START / END | Graph entry and termination markers | graph boundaries |
-
-## Tool calling vs MCP
-Tool calling is a model/application interaction pattern: the model emits a structured request naming a tool and its arguments. The application validates, authorizes and executes it, then returns the result to the model. The model does not execute Python or directly access a database.
-
-MCP is a protocol for discovering and invoking tools and other context across a standardized client/server boundary. An MCP host can discover server tools and make them available to a model. The model may request a tool call; the host/client performs the MCP invocation.
-
-LangGraph orchestrates the application workflow. MCP does not replace the model, tool calling or authorization logic.
+| LLM | Model that generates text from input | Hugging Face chat model |
+| Tool schema | Description of a function the model may request | `BANKING_TOOLS` |
+| Tool call | Structured request from the model | function name and JSON arguments |
+| Tool dispatcher | Application code that validates and runs a tool | `execute_banking_tool` |
+| Node | A unit of work in LangGraph | call model / execute tools / finish |
+| Conditional edge | Chooses the next graph node | tool call or direct response |
+| MCP | Standard protocol for tool/context exchange | mock banking MCP server |
 
 ## Banking security notes
 A real banking application needs authentication, authorization at every tool boundary, consent and purpose checks, audit logs, encryption, secrets management, data minimization, rate limiting, monitoring, threat modelling and human approval for sensitive actions. This prototype is read-only and fictional.
 
 ## Learning milestones
 1. Understand Python tools and LangGraph state/nodes/edges/reducers.
-2. Connect to a hosted Hugging Face model (current milestone).
-3. Add model-driven intent understanding and structured tool calling.
-4. Connect model tool calls to approved mock banking functions through LangGraph.
-5. Connect an MCP client and discover/invoke tools.
-6. Add message history, error handling, tests and tracing.
+2. Connect a hosted Hugging Face model.
+3. Let the model request approved banking tools through function calling (implemented in this milestone).
+4. Connect an MCP client and discover/invoke tools.
+5. Add conversation history, retries, robust error handling and tracing.
+6. Add RAG for banking FAQs.
 7. Prepare architecture diagrams and interview explanations.
 
 ## Interview summary
-"I built a fictional banking support agent to learn stateful agent workflows. LangGraph manages execution through state, nodes, edges and conditional routing. Mock functions provide read-only banking tools, while an MCP server exposes equivalent capabilities through a standard protocol. I also connected a hosted Hugging Face chat model; the next milestone is to let the model request approved tools while the application remains responsible for validation, authorization and execution."
+"I built a fictional banking support agent using LangGraph and a Hugging Face hosted model. The model can request approved read-only banking tools using structured function calling. The application validates the tool name and arguments, supplies trusted account context, executes the Python function and sends the result back to the model. LangGraph orchestrates the model and tool steps, while a separate MCP server demonstrates standardized tool exposure."
